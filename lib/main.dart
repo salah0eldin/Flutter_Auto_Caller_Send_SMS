@@ -29,6 +29,7 @@ class _AutoCallSmsPageState extends State<AutoCallSmsPage> {
   bool cancelRequested = false;
   final Telephony telephony = Telephony.instance;
   static const platform = MethodChannel('com.example.callsms/call');
+  static const smsPlatform = MethodChannel('com.example.callsms/sms');
 
   Future<void> _requestPermissions() async {
     await Permission.phone.request();
@@ -64,14 +65,36 @@ class _AutoCallSmsPageState extends State<AutoCallSmsPage> {
     final phone = phoneController.text;
     final times = int.tryParse(timesController.text) ?? 1;
     final message = smsController.text;
+    String? errorMsg;
     for (int i = 0; i < times; i++) {
       if (cancelRequested) break;
-      await telephony.sendSms(to: phone, message: message);
-      await Future.delayed(const Duration(seconds: 1));
+      try {
+        await smsPlatform.invokeMethod('sendSms', {
+          'phone': phone,
+          'message': message,
+        });
+      } catch (e) {
+        errorMsg = e.toString();
+        break;
+      }
+      await Future.delayed(const Duration(seconds: 10));
     }
     setState(() {
       isSendingSms = false;
     });
+    if (errorMsg != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send SMS: ' + errorMsg)),
+        );
+      }
+    } else if (!cancelRequested) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('SMS sent successfully!')));
+      }
+    }
   }
 
   void _cancelOperation() {
