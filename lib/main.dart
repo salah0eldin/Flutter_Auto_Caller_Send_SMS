@@ -30,6 +30,9 @@ class _AutoCallSmsPageState extends State<AutoCallSmsPage> {
   final Telephony telephony = Telephony.instance;
   static const platform = MethodChannel('com.example.callsms/call');
   static const smsPlatform = MethodChannel('com.example.callsms/sms');
+  static const callStateChannel = MethodChannel(
+    'com.example.callsms/callstate',
+  );
 
   Future<void> _requestPermissions() async {
     await Permission.phone.request();
@@ -47,10 +50,15 @@ class _AutoCallSmsPageState extends State<AutoCallSmsPage> {
       if (cancelRequested) break;
       try {
         await platform.invokeMethod('directCall', {'phone': phone});
+        // Wait for call to end before next call
+        await callStateChannel.invokeMethod('waitForCallEnd');
+        // The above will block until the native side notifies call ended
       } catch (e) {
         // Optionally show error
       }
-      await Future.delayed(const Duration(seconds: 5));
+      await Future.delayed(
+        const Duration(seconds: 15),
+      ); // Short delay after call ends
     }
     setState(() {
       isCalling = false;

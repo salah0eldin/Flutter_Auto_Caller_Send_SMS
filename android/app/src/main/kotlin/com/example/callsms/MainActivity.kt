@@ -10,10 +10,14 @@ import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import io.flutter.embedding.android.FlutterActivity
 import android.telephony.SmsManager
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.callsms/call"
     private val SMS_CHANNEL = "com.example.callsms/sms"
+    private var callEndedResult: MethodChannel.Result? = null
+    private var callStateChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -48,6 +52,7 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
+        callStateChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example.callsms/callstate")
     }
 
     private fun makeDirectCall(phoneNumber: String) {
@@ -55,7 +60,25 @@ class MainActivity : FlutterActivity() {
         intent.data = Uri.parse("tel:$phoneNumber")
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
             startActivity(intent)
+            listenForCallEnd()
         }
+    }
+
+    private fun listenForCallEnd() {
+        val telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+        telephonyManager.listen(object : PhoneStateListener() {
+            var wasRingingOrOffhook = false
+            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                if (state == TelephonyManager.CALL_STATE_OFFHOOK || state == TelephonyManager.CALL_STATE_RINGING) {
+                    wasRingingOrOffhook = true
+                }
+                if (wasRingingOrOffhook && state == TelephonyManager.CALL_STATE_IDLE) {
+                    // Call ended
+                    callStateChannel?.invokeMethod("callEnded", null)
+                    telephonyManager.listen(this, PhoneStateListener.LISTEN_NONE)
+                }
+            }
+        }, PhoneStateListener.LISTEN_CALL_STATE)
     }
 
     private fun sendSms(phoneNumber: String, message: String): Boolean {
